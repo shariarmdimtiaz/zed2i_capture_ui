@@ -202,3 +202,64 @@ class ZEDCapturePro(QWidget):
         label.setFixedSize(480, 270)
         label.setStyleSheet("background-color: #000; border: 2px solid #333;")
         return label
+
+    def update_frames(self):
+        if self.zed.grab(self.runtime_params) != sl.ERROR_CODE.SUCCESS:
+            return
+
+        self.zed.retrieve_image(self.image_left, sl.VIEW.LEFT)
+        self.zed.retrieve_image(self.image_right, sl.VIEW.RIGHT)
+        self.zed.retrieve_measure(self.depth_mat, sl.MEASURE.DEPTH)
+
+        left_img = self.image_left.get_data()
+        right_img = self.image_right.get_data()
+        depth_raw = self.depth_mat.get_data().astype(np.float32)
+
+        # Replace NaNs/Infs with 0
+        depth_clean = np.nan_to_num(depth_raw, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Get depth min/max from user input
+        try:
+            depth_min = float(self.depth_min_edit.text())
+            depth_max = float(self.depth_max_edit.text())
+        except ValueError:
+            depth_min = 500.0
+            depth_max = 10000.0
+
+        # Clip and normalize depth for display and saving
+        depth_clipped = np.clip(depth_clean, depth_min, depth_max)
+        depth_norm = ((depth_clipped - depth_min) / (depth_max - depth_min) * 255.0).astype(np.uint8)
+
+        # ******** THIS IS THE FIX *********
+        # Invert the normalized map: 0 (close) becomes 255 (red), 255 (far) becomes 0 (blue)
+        depth_inv_norm = 255 - depth_norm
+        # Apply colormap to the INVERTED map
+        depth_color = cv2.applyColorMap(depth_inv_norm, cv2.COLORMAP_JET)
+        depth_color_save = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)
+        # **********************************
+
+        left_rgb = cv2.cvtColor(left_img, cv2.COLOR_RGBA2RGB)
+        right_rgb = cv2.cvtColor(right_img, cv2.COLOR_RGBA2RGB)
+
+        # GPS info
+        lat, lon, alt, fix = self.gps.get_position()
+        lat = lat if lat is not None else 0.0
+        lon = lon if lon is not None else 0.0
+        alt = alt if alt is not None else 0.0
+        status = "GPS connected. [✔]" if fix == 2 else "GPS not connected. ⚠"
+        self.gps_label.setText(f"GPS: {lat:.6f}, {lon:.6f}, Alt: {alt:.1f}m, Status: {status}")
+
+        # Display images
+        self._display_qimage(left_rgb, self.left_label)
+        self._display_qimage(right_rgb, self.right_label)
+        self._display_qimage(depth_color, self.depth_label)
+
+        # Save frames
+        if self.recording and self.output_dir:
+            self.save_frames(left_rgb, right_rgb, depth_color_save, depth_clean, lat, lon, alt)
+
+    def _display_qimage(self, frame, widget):
+        height, width, _ = frame.shape
+        qimg = QImage(frame.data, width, height, 3 * width, QImage.Format_RGB888)
+        pix = QPixmap.fromImage(qimg).scaled(widget.width(), widget.height(), Qt.KeepAspectRatio)
+        widget.setPixmap(pix)
