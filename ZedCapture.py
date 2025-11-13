@@ -70,5 +70,49 @@ class GPSThread(threading.Thread):
     def stop(self):
         self.running = False
  
- 
+
+# ---------------- ZED Capture Tool ----------------
+class ZEDCapturePro(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ZED 2i Capture Tool (SDK 5.1)")
+        self.setGeometry(100, 80, 1600, 900)
+        self.setStyleSheet("""
+            QWidget { background-color: #1e1e1e; color: white; }
+            QLabel { color: white; font-size: 14px; }
+            QPushButton {
+                background-color: #0078D7; color: white; border-radius: 6px;
+                padding: 6px 12px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1493FF; }
+            QPushButton:disabled { background-color: #555; }
+        """)
+
+        # ------------------- Initialize ZED -------------------
+        self.zed = sl.Camera()
+        init_params = sl.InitParameters()
+        init_params.camera_resolution = sl.RESOLUTION.HD1080 #
+        init_params.depth_mode = sl.DEPTH_MODE.NEURAL
+        init_params.coordinate_units = sl.UNIT.MILLIMETER
+
+        if self.zed.open(init_params) != sl.ERROR_CODE.SUCCESS:
+            QMessageBox.critical(self, "Error", "Failed to open ZED camera.")
+            sys.exit(1)
+
+        self.runtime_params = sl.RuntimeParameters()
+        self.image_left = sl.Mat()
+        self.image_right = sl.Mat()
+        self.depth_mat = sl.Mat()
+
+        # Capture state
+        self.output_dir = None
+        self.recording = False
+        self.frame_id = 0
+        self.csv_writer = None
+        self.csv_file_handle = None
+        self.video_writer = None
+
+        # ------------------- GPS -------------------
+        self.gps = GPSThread(port=gps_port, baudrate=gps_baudrate)
+        self.gps.start()
 
