@@ -116,3 +116,89 @@ class ZEDCapturePro(QWidget):
         self.gps = GPSThread(port=gps_port, baudrate=gps_baudrate)
         self.gps.start()
 
+        # ------------------- UI -------------------
+        self.left_label = self._make_view_label("Left Camera")
+        self.right_label = self._make_view_label("Right Camera")
+        self.depth_label = self._make_view_label("Depth View")
+        self.gps_label = QLabel("GPS: Waiting for fix...")
+        self.gps_label.setAlignment(Qt.AlignCenter)
+        self.gps_label.setStyleSheet("color: #00FF00; font-size: 16px; font-weight: bold;")
+
+        # Control Panel
+        self.width_edit = QLineEdit("1920")
+        self.height_edit = QLineEdit("1080")
+        self.fps_edit = QLineEdit("30")
+        self.save_image_check = QCheckBox("Save Images")
+        self.save_image_check.setChecked(True)
+        self.save_video_check = QCheckBox("Save Video")
+        self.save_video_check.setChecked(True)
+
+        # Depth min/max controls
+        self.depth_min_edit = QLineEdit("500")
+        self.depth_max_edit = QLineEdit("10000")
+        self.depth_min_edit.setToolTip("Minimum depth in mm for normalization")
+        self.depth_max_edit.setToolTip("Maximum depth in mm for normalization")
+
+        self.btn_select = QPushButton("📁 Select Output Directory")
+        self.btn_select.clicked.connect(self.select_output_dir)
+        self.btn_start = QPushButton("▶ Start Capture")
+        self.btn_start.clicked.connect(self.start_capture)
+        self.btn_stop = QPushButton("⏹ Stop Capture")
+        self.btn_stop.clicked.connect(self.stop_capture)
+        self.btn_stop.setEnabled(False)
+        self.btn_close = QPushButton("❌ Close Camera")
+        self.btn_close.clicked.connect(self.close_camera)
+
+        # Layouts
+        control_form = QFormLayout()
+        control_form.addRow("Width:", self.width_edit)
+        control_form.addRow("Height:", self.height_edit)
+        control_form.addRow("FPS:", self.fps_edit)
+        control_form.addRow(self.save_image_check)
+        control_form.addRow(self.save_video_check)
+        control_form.addRow("Depth Min (mm):", self.depth_min_edit)
+        control_form.addRow("Depth Max (mm):", self.depth_max_edit)
+        control_form.addRow(self.btn_select)
+        control_form.addRow(self.btn_start)
+        control_form.addRow(self.btn_stop)
+        control_form.addRow(self.btn_close)
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self.left_label)
+        top_layout.addWidget(self.right_label)
+        top_layout.addWidget(self.depth_label)
+
+        right_layout = QVBoxLayout()
+        right_layout.addLayout(control_form)
+        right_layout.addStretch(1)
+
+        main_layout = QVBoxLayout()
+        main_top = QHBoxLayout()
+        main_top.addLayout(top_layout, stretch=3)
+        main_top.addLayout(right_layout, stretch=1)
+        main_layout.addLayout(main_top)
+        main_layout.addWidget(self.gps_label)
+        self.setLayout(main_layout)
+
+        # Timer
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frames)
+
+        # Read FPS from the UI to set the timer's speed
+        try:
+            fps = float(self.fps_edit.text())
+        except ValueError:
+            fps = 30.0  # Fallback in case of bad text in the box
+
+        # Calculate interval (e.g., 1000 ms / 30fps = 33 milliseconds)
+        timer_interval_ms = int(1000.0 / fps)
+
+        # Start the timer with the correct interval
+        self.timer.start(timer_interval_ms)
+
+    def _make_view_label(self, title):
+        label = QLabel(title)
+        label.setAlignment(Qt.AlignCenter)
+        label.setFixedSize(480, 270)
+        label.setStyleSheet("background-color: #000; border: 2px solid #333;")
+        return label
