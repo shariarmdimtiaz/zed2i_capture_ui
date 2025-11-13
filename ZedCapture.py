@@ -263,3 +263,86 @@ class ZEDCapturePro(QWidget):
         qimg = QImage(frame.data, width, height, 3 * width, QImage.Format_RGB888)
         pix = QPixmap.fromImage(qimg).scaled(widget.width(), widget.height(), Qt.KeepAspectRatio)
         widget.setPixmap(pix)
+        
+    def select_output_dir(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if folder:
+            self.output_dir = folder
+            os.makedirs(os.path.join(folder, "Left"), exist_ok=True)
+            os.makedirs(os.path.join(folder, "Right"), exist_ok=True)
+            os.makedirs(os.path.join(folder, "Depth"), exist_ok=True)
+            os.makedirs(os.path.join(folder, "Video"), exist_ok=True)
+            self.csv_file = os.path.join(folder, "gps_log.csv")
+            self.csv_file_handle = open(self.csv_file, "w", newline="")
+            self.csv_writer = csv.writer(self.csv_file_handle)
+            self.csv_writer.writerow(["frame_id", "timestamp", "latitude", "longitude", "altitude"])
+            print(f"[INFO] Output folder: {self.output_dir}")
+
+    def start_capture(self):
+        if not self.output_dir:
+            QMessageBox.warning(self, "Warning", "Select an output directory first!")
+            return
+        self.recording = True
+        self.frame_id = 0
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+
+        if self.save_video_check.isChecked():
+            video_path = os.path.join(self.output_dir, "Video", "output.avi")
+            width = int(self.width_edit.text())
+            height = int(self.height_edit.text())
+            fps = float(self.fps_edit.text())
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            self.video_writer = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
+            print(f"[INFO] Video recording started: {video_path}")
+
+        print("[INFO] Capture started...")
+
+    def stop_capture(self):
+        self.recording = False
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        if self.csv_file_handle:
+            self.csv_file_handle.close()
+        if self.video_writer:
+            self.video_writer.release()
+            self.video_writer = None
+            print("[INFO] Video recording stopped.")
+        print("[INFO] Capture stopped.")
+
+    def save_frames(self, left_img, right_img, depth_color, depth_raw, lat, lon, alt):
+        ts = str(self.frame_id).zfill(5)
+        if self.save_image_check.isChecked():
+            cv2.imwrite(os.path.join(self.output_dir, "Left", f"left_{ts}.png"), left_img)
+            cv2.imwrite(os.path.join(self.output_dir, "Right", f"right_{ts}.png"), right_img)
+            # This 'depth_color' is now the correctly inverted one
+            cv2.imwrite(os.path.join(self.output_dir, "Depth", f"depth_{ts}.png"), depth_color)
+            np.save(os.path.join(self.output_dir, "Depth", f"depth_{ts}.npy"), depth_raw)
+
+        if self.video_writer:
+            resized = cv2.resize(left_img, (int(self.width_edit.text()), int(self.height_edit.text())))
+            self.video_writer.write(resized)
+
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        if self.csv_writer:
+            self.csv_writer.writerow([ts, timestamp, lat, lon, alt])
+            self.csv_file_handle.flush()
+        self.frame_id += 1
+
+    def close_camera(self):
+        self.timer.stop()
+        self.zed.close()
+        self.gps.stop()
+        if self.csv_file_handle:
+            self.csv_file_handle.close()
+        if self.video_writer:
+            self.video_writer.release()
+        self.close()
+
+
+# ---------------- Main ----------------
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = ZEDCapturePro()
+    win.show()
+    sys.exit(app.exec_())
