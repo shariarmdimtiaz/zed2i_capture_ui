@@ -19,7 +19,7 @@ from PyQt5.QtGui import QImage, QPixmap
 # check the gps serial port
 gps_port = "COM1"
 gps_baudrate = 9600
-
+status = ""
 
 # ---------------- GPS Thread ----------------
 class GPSThread(threading.Thread):
@@ -246,7 +246,12 @@ class ZEDCapturePro(QWidget):
         lat = lat if lat is not None else 0.0
         lon = lon if lon is not None else 0.0
         alt = alt if alt is not None else 0.0
-        status = "GPS connected. [✔]" if fix == 2 else "GPS not connected. ⚠"
+        if fix == 2:
+            status = "GPS connected. [✔]"
+        elif fix == 1:
+            status = "GPS not connected. ⚠"
+        else:
+            status = ""
         self.gps_label.setText(f"GPS: {lat:.6f}, {lon:.6f}, Alt: {alt:.1f}m, Status: {status}")
 
         # Display images
